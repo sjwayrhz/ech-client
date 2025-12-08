@@ -41,7 +41,32 @@ namespace EchWorkersManager
         private void InitializeTrayIcon()
         {
             trayIcon = new NotifyIcon();
-            trayIcon.Icon = System.Drawing.SystemIcons.Application;
+            
+            // 尝试从嵌入资源加载图标
+            try
+            {
+                Assembly assembly = Assembly.GetExecutingAssembly();
+                string iconResourceName = "EchWorkersManager.app.ico";
+                using (Stream iconStream = assembly.GetManifestResourceStream(iconResourceName))
+                {
+                    if (iconStream != null)
+                    {
+                        trayIcon.Icon = new System.Drawing.Icon(iconStream);
+                        this.Icon = new System.Drawing.Icon(iconStream);
+                    }
+                    else
+                    {
+                        // 如果嵌入资源不存在,使用系统默认图标
+                        trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                    }
+                }
+            }
+            catch
+            {
+                // 加载失败时使用系统默认图标
+                trayIcon.Icon = System.Drawing.SystemIcons.Application;
+            }
+            
             trayIcon.Text = "ECH Workers Manager";
             trayIcon.Visible = false;
 

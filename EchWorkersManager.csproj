@@ -13,6 +13,8 @@
   <ItemGroup>
     <!-- 将 ech-workers.exe 嵌入为资源 -->
     <EmbeddedResource Include="ech-workers.exe" />
+    <!-- 将 app.ico 嵌入为资源 -->
+    <EmbeddedResource Include="app.ico" />
   </ItemGroup>
 
 </Project>
