@@ -9,6 +9,7 @@ using System.Threading;
 using System.Text;
 using System.IO;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace EchWorkersManager
 {
@@ -24,6 +25,9 @@ namespace EchWorkersManager
         private int httpProxyPort = 10809;
         private NotifyIcon trayIcon;
         private string echWorkersPath;
+        private HashSet<string> gfwList = new HashSet<string>();
+        private HashSet<string> chinaIPList = new HashSet<string>();
+        private string routingMode = "GFWList"; // 全局代理, GFWList
 
         [DllImport("wininet.dll")]
         private static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
@@ -36,13 +40,67 @@ namespace EchWorkersManager
             InitializeTrayIcon();
             ExtractEchWorkers();
             LoadSettings();
+            InitializeRoutingData();
+        }
+
+        private void InitializeRoutingData()
+        {
+            // 加载 GFWList (简化版,实际应用中应该加载完整列表)
+            string[] commonBlockedDomains = {
+                "google.com", "youtube.com", "facebook.com", "twitter.com", "instagram.com",
+                "gmail.com", "blogspot.com", "wordpress.com", "wikipedia.org", "tumblr.com",
+                "github.com", "telegram.org", "whatsapp.com", "medium.com", "reddit.com",
+                "pinterest.com", "twimg.com", "t.co", "bit.ly", "goo.gl"
+            };
+            
+            foreach (string domain in commonBlockedDomains)
+            {
+                gfwList.Add(domain);
+            }
+
+            // 中国大陆 IP 段 (简化版,实际应用中应该加载完整 CIDR 列表)
+            string[] chinaCIDR = {
+                "1.0.1.0", "1.0.2.0", "1.0.8.0", "1.0.32.0", 
+                "14.0.0.0", "27.0.0.0", "36.0.0.0", "42.0.0.0",
+                "58.0.0.0", "59.0.0.0", "60.0.0.0", "61.0.0.0",
+                "110.0.0.0", "111.0.0.0", "112.0.0.0", "113.0.0.0",
+                "114.0.0.0", "115.0.0.0", "116.0.0.0", "117.0.0.0",
+                "118.0.0.0", "119.0.0.0", "120.0.0.0", "121.0.0.0",
+                "122.0.0.0", "123.0.0.0", "124.0.0.0", "125.0.0.0"
+            };
+            
+            foreach (string ip in chinaCIDR)
+            {
+                chinaIPList.Add(ip);
+            }
+        }
+
+        private bool ShouldProxy(string host)
+        {
+            if (routingMode == "全局代理")
+            {
+                return true;
+            }
+            else if (routingMode == "GFWList")
+            {
+                // 检查是否在 GFWList 中
+                foreach (string domain in gfwList)
+                {
+                    if (host.EndsWith(domain) || host == domain)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            return true;
         }
 
         private void InitializeTrayIcon()
         {
             trayIcon = new NotifyIcon();
             
-            // 尝试从嵌入资源加载图标
             try
             {
                 Assembly assembly = Assembly.GetExecutingAssembly();
@@ -56,21 +114,18 @@ namespace EchWorkersManager
                     }
                     else
                     {
-                        // 如果嵌入资源不存在,使用系统默认图标
                         trayIcon.Icon = System.Drawing.SystemIcons.Application;
                     }
                 }
             }
             catch
             {
-                // 加载失败时使用系统默认图标
                 trayIcon.Icon = System.Drawing.SystemIcons.Application;
             }
             
             trayIcon.Text = "ECH Workers Manager";
             trayIcon.Visible = false;
 
-            // 创建右键菜单
             ContextMenuStrip trayMenu = new ContextMenuStrip();
             
             ToolStripMenuItem showItem = new ToolStripMenuItem("显示主窗口");
@@ -113,11 +168,9 @@ namespace EchWorkersManager
         {
             try
             {
-                // 从嵌入资源中提取 ech-workers.exe
                 Assembly assembly = Assembly.GetExecutingAssembly();
                 string resourceName = "EchWorkersManager.ech-workers.exe";
                 
-                // 提取到临时目录
                 string tempPath = Path.Combine(Path.GetTempPath(), "EchWorkersManager");
                 if (!Directory.Exists(tempPath))
                 {
@@ -126,7 +179,6 @@ namespace EchWorkersManager
                 
                 echWorkersPath = Path.Combine(tempPath, "ech-workers.exe");
                 
-                // 如果文件已存在且程序正在运行,不要覆盖
                 if (!File.Exists(echWorkersPath) || !IsProcessRunning("ech-workers"))
                 {
                     using (Stream resourceStream = assembly.GetManifestResourceStream(resourceName))
@@ -140,7 +192,6 @@ namespace EchWorkersManager
                         }
                         else
                         {
-                            // 如果没有嵌入资源,尝试使用当前目录的文件
                             string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ech-workers.exe");
                             if (File.Exists(localPath))
                             {
@@ -156,7 +207,6 @@ namespace EchWorkersManager
             }
             catch (Exception ex)
             {
-                // 如果提取失败,尝试使用当前目录的文件
                 string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ech-workers.exe");
                 if (File.Exists(localPath))
                 {
@@ -179,14 +229,12 @@ namespace EchWorkersManager
         {
             this.SuspendLayout();
             
-            // Form
-            this.ClientSize = new System.Drawing.Size(500, 420);
+            this.ClientSize = new System.Drawing.Size(500, 480);
             this.Text = "ECH Workers Manager";
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // Domain Label & TextBox
             Label lblDomain = new Label();
             lblDomain.Text = "域名:";
             lblDomain.Location = new System.Drawing.Point(20, 20);
@@ -200,7 +248,6 @@ namespace EchWorkersManager
             txtDomain.Text = "ech.sjwayrhz9.workers.dev:443";
             this.Controls.Add(txtDomain);
 
-            // IP Label & TextBox
             Label lblIP = new Label();
             lblIP.Text = "IP:";
             lblIP.Location = new System.Drawing.Point(20, 60);
@@ -214,7 +261,6 @@ namespace EchWorkersManager
             txtIP.Text = "saas.sin.fan";
             this.Controls.Add(txtIP);
 
-            // Token Label & TextBox
             Label lblToken = new Label();
             lblToken.Text = "Token:";
             lblToken.Location = new System.Drawing.Point(20, 100);
@@ -228,7 +274,6 @@ namespace EchWorkersManager
             txtToken.Text = "miy8TMEisePcHp$K";
             this.Controls.Add(txtToken);
 
-            // Local Address Label & TextBox
             Label lblLocal = new Label();
             lblLocal.Text = "本地SOCKS5:";
             lblLocal.Location = new System.Drawing.Point(20, 140);
@@ -242,7 +287,6 @@ namespace EchWorkersManager
             txtLocal.Text = "127.0.0.1:30000";
             this.Controls.Add(txtLocal);
 
-            // HTTP Proxy Port Label & TextBox
             Label lblHttpPort = new Label();
             lblHttpPort.Text = "HTTP代理端口:";
             lblHttpPort.Location = new System.Drawing.Point(20, 170);
@@ -256,22 +300,39 @@ namespace EchWorkersManager
             txtHttpPort.Text = "10809";
             this.Controls.Add(txtHttpPort);
 
-            // Start Button
+            // 路由模式选择
+            Label lblRouting = new Label();
+            lblRouting.Text = "路由模式:";
+            lblRouting.Location = new System.Drawing.Point(20, 200);
+            lblRouting.Size = new System.Drawing.Size(100, 20);
+            this.Controls.Add(lblRouting);
+
+            ComboBox cmbRouting = new ComboBox();
+            cmbRouting.Name = "cmbRouting";
+            cmbRouting.Location = new System.Drawing.Point(130, 200);
+            cmbRouting.Size = new System.Drawing.Size(340, 20);
+            cmbRouting.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbRouting.Items.AddRange(new string[] { "全局代理", "GFWList" });
+            cmbRouting.SelectedIndex = 1;
+            cmbRouting.SelectedIndexChanged += (s, e) => {
+                routingMode = cmbRouting.SelectedItem.ToString();
+            };
+            this.Controls.Add(cmbRouting);
+
             Button btnStart = new Button();
             btnStart.Name = "btnStart";
             btnStart.Text = "启动服务";
-            btnStart.Location = new System.Drawing.Point(130, 220);
+            btnStart.Location = new System.Drawing.Point(130, 250);
             btnStart.Size = new System.Drawing.Size(120, 40);
             btnStart.Font = new System.Drawing.Font("Microsoft YaHei", 10F, System.Drawing.FontStyle.Bold);
             btnStart.BackColor = System.Drawing.Color.LightGreen;
             btnStart.Click += BtnStart_Click;
             this.Controls.Add(btnStart);
 
-            // Stop Button
             Button btnStop = new Button();
             btnStop.Name = "btnStop";
             btnStop.Text = "停止服务";
-            btnStop.Location = new System.Drawing.Point(270, 220);
+            btnStop.Location = new System.Drawing.Point(270, 250);
             btnStop.Size = new System.Drawing.Size(120, 40);
             btnStop.Font = new System.Drawing.Font("Microsoft YaHei", 10F, System.Drawing.FontStyle.Bold);
             btnStop.BackColor = System.Drawing.Color.LightCoral;
@@ -279,31 +340,28 @@ namespace EchWorkersManager
             btnStop.Click += BtnStop_Click;
             this.Controls.Add(btnStop);
 
-            // Status Label
             Label lblStatus = new Label();
             lblStatus.Name = "lblStatus";
-            lblStatus.Text = "状态: 未运行\nHTTP代理: 未启动\n系统代理: 未启用";
-            lblStatus.Location = new System.Drawing.Point(20, 280);
-            lblStatus.Size = new System.Drawing.Size(450, 80);
+            lblStatus.Text = "状态: 未运行\nHTTP代理: 未启动\n系统代理: 未启用\n路由模式: 全局代理";
+            lblStatus.Location = new System.Drawing.Point(20, 310);
+            lblStatus.Size = new System.Drawing.Size(450, 100);
             lblStatus.ForeColor = System.Drawing.Color.Blue;
             lblStatus.Font = new System.Drawing.Font("Microsoft YaHei", 9F);
             this.Controls.Add(lblStatus);
 
-            // Save Button
             Button btnSave = new Button();
             btnSave.Text = "保存配置";
-            btnSave.Location = new System.Drawing.Point(400, 220);
+            btnSave.Location = new System.Drawing.Point(400, 250);
             btnSave.Size = new System.Drawing.Size(70, 40);
             btnSave.Click += BtnSave_Click;
             this.Controls.Add(btnSave);
 
-            // Info Label
             Label lblInfo = new Label();
-            lblInfo.Text = "💡 提示: 点击\"启动服务\"将自动启用系统代理 | 最小化到系统托盘";
-            lblInfo.Location = new System.Drawing.Point(20, 370);
-            lblInfo.Size = new System.Drawing.Size(450, 30);
+            lblInfo.Text = "💡 全局代理=所有流量 | GFWList=被墙网站走代理";
+            lblInfo.Location = new System.Drawing.Point(20, 420);
+            lblInfo.Size = new System.Drawing.Size(450, 40);
             lblInfo.ForeColor = System.Drawing.Color.Green;
-            lblInfo.Font = new System.Drawing.Font("Microsoft YaHei", 9F);
+            lblInfo.Font = new System.Drawing.Font("Microsoft YaHei", 8.5F);
             this.Controls.Add(lblInfo);
 
             this.Resize += Form1_Resize;
@@ -331,14 +389,14 @@ namespace EchWorkersManager
                 TextBox txtToken = (TextBox)this.Controls["txtToken"];
                 TextBox txtLocal = (TextBox)this.Controls["txtLocal"];
                 TextBox txtHttpPort = (TextBox)this.Controls["txtHttpPort"];
+                ComboBox cmbRouting = (ComboBox)this.Controls["cmbRouting"];
 
-                // 解析SOCKS5地址
                 string[] parts = txtLocal.Text.Split(':');
                 socksHost = parts[0];
                 socksPort = int.Parse(parts[1]);
                 httpProxyPort = int.Parse(txtHttpPort.Text);
+                routingMode = cmbRouting.SelectedItem.ToString();
 
-                // 启动 ech-workers
                 string arguments = $"-f {txtDomain.Text} -ip {txtIP.Text} -token {txtToken.Text} -l {txtLocal.Text}";
                 workerProcess = new Process();
                 workerProcess.StartInfo.FileName = echWorkersPath;
@@ -347,28 +405,23 @@ namespace EchWorkersManager
                 workerProcess.StartInfo.CreateNoWindow = true;
                 workerProcess.Start();
 
-                // 等待SOCKS5服务启动
                 Thread.Sleep(1000);
 
-                // 启动HTTP代理转换器
                 StartHttpProxy();
-
-                // 启用系统代理
                 EnableSystemProxy();
 
                 isRunning = true;
                 ((Button)this.Controls["btnStart"]).Enabled = false;
                 ((Button)this.Controls["btnStop"]).Enabled = true;
                 
-                // 更新托盘菜单
                 if (trayIcon.ContextMenuStrip != null)
                 {
                     ((ToolStripMenuItem)trayIcon.ContextMenuStrip.Items["startItem"]).Enabled = false;
                     ((ToolStripMenuItem)trayIcon.ContextMenuStrip.Items["stopItem"]).Enabled = true;
                 }
                 
-                UpdateStatusLabel($"✅ 状态: 运行中\n✅ HTTP代理: 127.0.0.1:{httpProxyPort}\n✅ 系统代理: 已启用");
-                trayIcon.Text = "ECH Workers Manager - 运行中";
+                UpdateStatusLabel($"✅ 状态: 运行中\n✅ HTTP代理: 127.0.0.1:{httpProxyPort}\n✅ 系统代理: 已启用\n✅ 路由模式: {routingMode}");
+                trayIcon.Text = $"ECH Workers Manager - 运行中 ({routingMode})";
             }
             catch (Exception ex)
             {
@@ -432,89 +485,178 @@ namespace EchWorkersManager
                 string method = requestLine[0];
                 string url = requestLine[1];
 
+                // 提取目标主机
+                string targetHost = "";
+                if (method == "CONNECT")
+                {
+                    targetHost = url.Split(':')[0];
+                }
+                else
+                {
+                    try
+                    {
+                        Uri uri = new Uri(url.StartsWith("http") ? url : "http://" + url);
+                        targetHost = uri.Host;
+                    }
+                    catch { }
+                }
+
+                // 检查是否需要代理
+                if (!ShouldProxy(targetHost))
+                {
+                    // 不走代理,直接连接
+                    HandleDirectConnection(client, clientStream, buffer, bytesRead, method, url, targetHost);
+                    return;
+                }
+
+                // 走代理
+                if (method == "CONNECT")
+                {
+                    HandleConnectMethod(client, clientStream, url);
+                }
+                else
+                {
+                    HandleHttpMethod(client, clientStream, buffer, bytesRead, url);
+                }
+            }
+            catch { }
+        }
+
+        private void HandleDirectConnection(TcpClient client, NetworkStream clientStream, byte[] buffer, int bytesRead, string method, string url, string targetHost)
+        {
+            try
+            {
                 if (method == "CONNECT")
                 {
                     string[] hostPort = url.Split(':');
-                    string targetHost = hostPort[0];
                     int targetPort = hostPort.Length > 1 ? int.Parse(hostPort[1]) : 443;
 
-                    TcpClient socksClient = new TcpClient(socksHost, socksPort);
-                    NetworkStream socksStream = socksClient.GetStream();
+                    TcpClient targetClient = new TcpClient(targetHost, targetPort);
+                    NetworkStream targetStream = targetClient.GetStream();
 
-                    socksStream.Write(new byte[] { 0x05, 0x01, 0x00 }, 0, 3);
-                    byte[] response = new byte[2];
-                    socksStream.Read(response, 0, 2);
+                    string successResponse = "HTTP/1.1 200 Connection Established\r\n\r\n";
+                    byte[] successBytes = Encoding.UTF8.GetBytes(successResponse);
+                    clientStream.Write(successBytes, 0, successBytes.Length);
 
-                    byte[] hostBytes = Encoding.ASCII.GetBytes(targetHost);
-                    byte[] connectRequest = new byte[7 + hostBytes.Length];
-                    connectRequest[0] = 0x05;
-                    connectRequest[1] = 0x01;
-                    connectRequest[2] = 0x00;
-                    connectRequest[3] = 0x03;
-                    connectRequest[4] = (byte)hostBytes.Length;
-                    Array.Copy(hostBytes, 0, connectRequest, 5, hostBytes.Length);
-                    connectRequest[5 + hostBytes.Length] = (byte)(targetPort >> 8);
-                    connectRequest[6 + hostBytes.Length] = (byte)(targetPort & 0xFF);
+                    Thread forwardThread = new Thread(() => ForwardData(clientStream, targetStream));
+                    forwardThread.IsBackground = true;
+                    forwardThread.Start();
+                    ForwardData(targetStream, clientStream);
 
-                    socksStream.Write(connectRequest, 0, connectRequest.Length);
-                    byte[] connectResponse = new byte[10];
-                    socksStream.Read(connectResponse, 0, 10);
-
-                    if (connectResponse[1] == 0x00)
-                    {
-                        string successResponse = "HTTP/1.1 200 Connection Established\r\n\r\n";
-                        byte[] successBytes = Encoding.UTF8.GetBytes(successResponse);
-                        clientStream.Write(successBytes, 0, successBytes.Length);
-
-                        Thread forwardThread = new Thread(() => ForwardData(clientStream, socksStream));
-                        forwardThread.IsBackground = true;
-                        forwardThread.Start();
-                        ForwardData(socksStream, clientStream);
-                    }
-
-                    socksClient.Close();
+                    targetClient.Close();
                 }
                 else
                 {
                     Uri uri = new Uri(url.StartsWith("http") ? url : "http://" + url);
-                    string targetHost = uri.Host;
                     int targetPort = uri.Port;
 
-                    TcpClient socksClient = new TcpClient(socksHost, socksPort);
-                    NetworkStream socksStream = socksClient.GetStream();
+                    TcpClient targetClient = new TcpClient(targetHost, targetPort);
+                    NetworkStream targetStream = targetClient.GetStream();
 
-                    socksStream.Write(new byte[] { 0x05, 0x01, 0x00 }, 0, 3);
-                    byte[] response = new byte[2];
-                    socksStream.Read(response, 0, 2);
+                    targetStream.Write(buffer, 0, bytesRead);
 
-                    byte[] hostBytes = Encoding.ASCII.GetBytes(targetHost);
-                    byte[] connectRequest = new byte[7 + hostBytes.Length];
-                    connectRequest[0] = 0x05;
-                    connectRequest[1] = 0x01;
-                    connectRequest[2] = 0x00;
-                    connectRequest[3] = 0x03;
-                    connectRequest[4] = (byte)hostBytes.Length;
-                    Array.Copy(hostBytes, 0, connectRequest, 5, hostBytes.Length);
-                    connectRequest[5 + hostBytes.Length] = (byte)(targetPort >> 8);
-                    connectRequest[6 + hostBytes.Length] = (byte)(targetPort & 0xFF);
+                    Thread forwardThread = new Thread(() => ForwardData(targetStream, clientStream));
+                    forwardThread.IsBackground = true;
+                    forwardThread.Start();
+                    ForwardData(clientStream, targetStream);
 
-                    socksStream.Write(connectRequest, 0, connectRequest.Length);
-                    byte[] connectResponse = new byte[10];
-                    socksStream.Read(connectResponse, 0, 10);
-
-                    if (connectResponse[1] == 0x00)
-                    {
-                        socksStream.Write(buffer, 0, bytesRead);
-
-                        Thread forwardThread = new Thread(() => ForwardData(socksStream, clientStream));
-                        forwardThread.IsBackground = true;
-                        forwardThread.Start();
-                        ForwardData(clientStream, socksStream);
-                    }
-
-                    socksClient.Close();
+                    targetClient.Close();
                 }
 
+                client.Close();
+            }
+            catch { }
+        }
+
+        private void HandleConnectMethod(TcpClient client, NetworkStream clientStream, string url)
+        {
+            try
+            {
+                string[] hostPort = url.Split(':');
+                string targetHost = hostPort[0];
+                int targetPort = hostPort.Length > 1 ? int.Parse(hostPort[1]) : 443;
+
+                TcpClient socksClient = new TcpClient(socksHost, socksPort);
+                NetworkStream socksStream = socksClient.GetStream();
+
+                socksStream.Write(new byte[] { 0x05, 0x01, 0x00 }, 0, 3);
+                byte[] response = new byte[2];
+                socksStream.Read(response, 0, 2);
+
+                byte[] hostBytes = Encoding.ASCII.GetBytes(targetHost);
+                byte[] connectRequest = new byte[7 + hostBytes.Length];
+                connectRequest[0] = 0x05;
+                connectRequest[1] = 0x01;
+                connectRequest[2] = 0x00;
+                connectRequest[3] = 0x03;
+                connectRequest[4] = (byte)hostBytes.Length;
+                Array.Copy(hostBytes, 0, connectRequest, 5, hostBytes.Length);
+                connectRequest[5 + hostBytes.Length] = (byte)(targetPort >> 8);
+                connectRequest[6 + hostBytes.Length] = (byte)(targetPort & 0xFF);
+
+                socksStream.Write(connectRequest, 0, connectRequest.Length);
+                byte[] connectResponse = new byte[10];
+                socksStream.Read(connectResponse, 0, 10);
+
+                if (connectResponse[1] == 0x00)
+                {
+                    string successResponse = "HTTP/1.1 200 Connection Established\r\n\r\n";
+                    byte[] successBytes = Encoding.UTF8.GetBytes(successResponse);
+                    clientStream.Write(successBytes, 0, successBytes.Length);
+
+                    Thread forwardThread = new Thread(() => ForwardData(clientStream, socksStream));
+                    forwardThread.IsBackground = true;
+                    forwardThread.Start();
+                    ForwardData(socksStream, clientStream);
+                }
+
+                socksClient.Close();
+                client.Close();
+            }
+            catch { }
+        }
+
+        private void HandleHttpMethod(TcpClient client, NetworkStream clientStream, byte[] buffer, int bytesRead, string url)
+        {
+            try
+            {
+                Uri uri = new Uri(url.StartsWith("http") ? url : "http://" + url);
+                string targetHost = uri.Host;
+                int targetPort = uri.Port;
+
+                TcpClient socksClient = new TcpClient(socksHost, socksPort);
+                NetworkStream socksStream = socksClient.GetStream();
+
+                socksStream.Write(new byte[] { 0x05, 0x01, 0x00 }, 0, 3);
+                byte[] response = new byte[2];
+                socksStream.Read(response, 0, 2);
+
+                byte[] hostBytes = Encoding.ASCII.GetBytes(targetHost);
+                byte[] connectRequest = new byte[7 + hostBytes.Length];
+                connectRequest[0] = 0x05;
+                connectRequest[1] = 0x01;
+                connectRequest[2] = 0x00;
+                connectRequest[3] = 0x03;
+                connectRequest[4] = (byte)hostBytes.Length;
+                Array.Copy(hostBytes, 0, connectRequest, 5, hostBytes.Length);
+                connectRequest[5 + hostBytes.Length] = (byte)(targetPort >> 8);
+                connectRequest[6 + hostBytes.Length] = (byte)(targetPort & 0xFF);
+
+                socksStream.Write(connectRequest, 0, connectRequest.Length);
+                byte[] connectResponse = new byte[10];
+                socksStream.Read(connectResponse, 0, 10);
+
+                if (connectResponse[1] == 0x00)
+                {
+                    socksStream.Write(buffer, 0, bytesRead);
+
+                    Thread forwardThread = new Thread(() => ForwardData(socksStream, clientStream));
+                    forwardThread.IsBackground = true;
+                    forwardThread.Start();
+                    ForwardData(clientStream, socksStream);
+                }
+
+                socksClient.Close();
                 client.Close();
             }
             catch { }
