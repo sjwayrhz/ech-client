@@ -9,8 +9,11 @@ EchWorkersManager/
 ├── EchWorkersManager.csproj
 ├── Program.cs
 ├── Form1.cs
+├── ech-workers.exe          ← 放在项目根目录!
 └── README.md
 ```
+
+**重要**: 将 `ech-workers.exe` 放在项目根目录(与 .csproj 文件同级),编译时会自动嵌入到最终的 exe 文件中
 
 ## 构建步骤
 
@@ -51,27 +54,53 @@ dotnet build -c Release
 dotnet run
 ```
 
-### 方法3: 发布独立应用 (不需要安装 .NET 运行时)
+### 方法3: 发布独立应用 (不需要安装 .NET 运行时) ⭐推荐⭐
 
+这是**推荐的打包方法**,生成的 exe 文件可以在没有安装 .NET 6 的电脑上直接运行!
+
+#### Windows x64 (64位系统)
 ```bash
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-发布后的单文件 exe 在: `bin\Release\net6.0-windows\win-x64\publish\`
+#### Windows x86 (32位系统)
+```bash
+dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+发布后的**单文件 exe** 在: `bin\Release\net6.0-windows\win-x64\publish\EchWorkersManager.exe`
+
+**特点**:
+- ✅ 单个 exe 文件,包含所有依赖
+- ✅ 不需要目标电脑安装 .NET 6
+- ✅ ech-workers.exe 已嵌入,无需额外文件
+- ✅ 直接分发给用户即可使用
+- ⚠️ 文件体积较大(约 60-80MB)
+
+#### 减小文件体积(可选)
+如果想减小 exe 文件大小,可以添加以下参数:
+
+```bash
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=true
+```
+
+这样可以将文件大小压缩到 30-40MB 左右。
 
 ## 使用说明
 
-### 快速开始(3步即可)
-1. **启动服务**: 点击"启动服务"按钮 → 自动启动 SOCKS5 和 HTTP 代理
-2. **启用系统代理**: 点击"启用系统代理"按钮 → 所有浏览器立即生效
-3. **开始上网**: 打开任何浏览器即可使用代理
+### 快速开始(2步即可!)
+1. **启动服务**: 点击"启动服务" → 自动启动代理并启用系统代理
+2. **开始上网**: 打开任何浏览器即可使用代理 ✅
+
+### 停止使用
+- **停止服务**: 点击"停止服务" → 自动停止代理并禁用系统代理
+- **关闭程序**: 直接关闭窗口 → 自动清理所有代理设置
 
 ### 详细说明
 1. **配置参数**: 填写域名、IP、Token、本地SOCKS5地址
 2. **HTTP代理端口**: 默认10809(可修改)
-3. **保存配置**: 点击"保存配置"保存设置
-4. **禁用代理**: 点击"禁用系统代理"取消系统代理
-5. **停止服务**: 点击"停止服务"停止所有代理服务
+3. **保存配置**: 点击"保存配置"保存设置(下次自动加载)
+4. **一键操作**: 启动/停止按钮自动处理所有代理设置,无需手动操作
 
 ## 🎯 核心功能说明
 
@@ -82,36 +111,85 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 浏览器 → HTTP代理(127.0.0.1:10809) → SOCKS5代理(127.0.0.1:30000) → ech-workers → 目标网站
 ```
 
-### 一键启用系统代理
+### 一键启动,自动配置
 1. 点击"启动服务"按钮
-2. 点击"启用系统代理"按钮
+2. ✅ **自动启动代理 + 自动启用系统代理**
 3. ✅ **所有浏览器(Chrome/Firefox/Edge)立即生效!**
+4. 点击"停止服务"或关闭程序时,自动清理所有代理设置
 
 **无需安装任何插件!** 就像使用 v2rayN 一样简单!
 
 ## 注意事项
 
-1. **ech-workers.exe 位置**: 程序会在当前目录查找 `ech-workers.exe`,请确保将编译后的管理器和 ech-workers.exe 放在同一目录
-2. **管理员权限**: 某些情况下修改系统代理可能需要管理员权限
-3. **.NET 运行时**: 如果使用 Debug/Release 编译,运行时需要安装 .NET 6 运行时。使用"发布独立应用"方式可以避免此要求
+1. **ech-workers.exe 位置**: 
+   - 开发时:将 `ech-workers.exe` 放在项目根目录(与 .csproj 同级)
+   - 编译后会自动嵌入到 EchWorkersManager.exe 中
+   - 运行时会自动提取到临时目录
+   
+2. **系统托盘**: 
+   - 点击最小化按钮,程序会隐藏到系统托盘
+   - 双击托盘图标或右键菜单"显示主窗口"恢复
+   - 右键托盘图标可快速启动/停止服务
+   
+3. **独立发布**: 
+   - 使用 `--self-contained` 参数发布后,用户无需安装 .NET 6
+   - 单个 exe 文件包含所有依赖,直接分发即可
+   
 4. **配置保存**: 配置保存在注册表 `HKEY_CURRENT_USER\Software\EchWorkersManager` 中
 
 ## 功能特性
 
 - ✅ 可视化配置界面
-- ✅ 启动/停止服务
+- ✅ **一键启动:自动启动服务 + 启用系统代理**
+- ✅ **一键停止:自动停止服务 + 禁用系统代理**
+- ✅ **最小化到系统托盘,双击恢复**
+- ✅ **托盘右键菜单快速操作**
+- ✅ **关闭自动清理:关闭程序时自动禁用系统代理**
+- ✅ **ech-workers.exe 自动嵌入,无需额外文件**
 - ✅ **内置 SOCKS5 → HTTP 代理转换器**
-- ✅ **一键启用系统代理,所有浏览器立即生效**
 - ✅ **无需安装浏览器插件**
+- ✅ **支持独立发布,无需安装 .NET 6**
 - ✅ 配置自动保存/加载
-- ✅ 退出时安全提示
 - ✅ 状态实时显示
 - ✅ 完全模拟 v2rayN 的使用体验
+- ✅ 操作简化,无需确认对话框
 
 ## 系统要求
 
 - Windows 7 SP1 或更高版本
-- .NET 6.0 运行时 (或使用独立发布版本)
+- 如果使用独立发布版本,无需安装 .NET 6.0
+
+## 快速打包指南 (3步完成)
+
+### 步骤1: 准备项目文件
+```bash
+# 创建项目文件夹
+mkdir EchWorkersManager
+cd EchWorkersManager
+
+# 复制以下文件到项目文件夹:
+# - EchWorkersManager.csproj
+# - Program.cs
+# - Form1.cs
+# - ech-workers.exe (重要!放在项目根目录)
+```
+
+### 步骤2: 发布独立应用
+```bash
+# 64位系统(推荐)
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+# 32位系统
+dotnet publish -c Release -r win-x86 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+### 步骤3: 获取最终文件
+生成的单个 exe 文件位于:
+```
+bin\Release\net6.0-windows\win-x64\publish\EchWorkersManager.exe
+```
+
+**直接分发这个 exe 文件给用户即可!** 用户无需安装任何运行时环境。
 
 ## 故障排除
 

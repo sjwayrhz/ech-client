@@ -10,4 +10,9 @@
     <RootNamespace>EchWorkersManager</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 将 ech-workers.exe 嵌入为资源 -->
+    <EmbeddedResource Include="ech-workers.exe" />
+  </ItemGroup>
+
 </Project>
