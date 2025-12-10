@@ -20,9 +20,7 @@ namespace EchWorkersManager.Services
         public void Start(ProxyConfig config)
         {
             if (IsRunning)
-            {
                 throw new InvalidOperationException("Worker service is already running");
-            }
 
             string arguments = $"-f {config.Domain} -ip {config.IP} -token {config.Token} -l {config.LocalAddress}";
             
@@ -39,9 +37,7 @@ namespace EchWorkersManager.Services
         public void Stop()
         {
             if (!IsRunning)
-            {
                 return;
-            }
 
             if (workerProcess != null && !workerProcess.HasExited)
             {
@@ -50,6 +46,19 @@ namespace EchWorkersManager.Services
             }
 
             IsRunning = false;
+        }
+
+        // ====== 添加的代码，用于避免 TUN 模块报错 ======
+
+        public void SendPacket(byte[] packet)
+        {
+            // TODO: 将来写入 ech-client stdin
+        }
+
+        public byte[]? ReceivePacket()
+        {
+            // TODO: 将来从 ech-client stdout 读取数据
+            return null;
         }
     }
 }

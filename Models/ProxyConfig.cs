@@ -8,6 +8,9 @@ namespace EchWorkersManager.Models
         public string LocalAddress { get; set; } = "127.0.0.1:30000";
         public int HttpProxyPort { get; set; } = 10809;
         public string RoutingMode { get; set; } = "绕过大陆";
+        
+        // 【新增】TunEnabled 属性 (解决编译错误)
+        public bool TunEnabled { get; set; } = false; 
 
         public string SocksHost
         {

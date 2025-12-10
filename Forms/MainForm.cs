@@ -12,14 +12,22 @@ namespace EchWorkersManager.Forms
 {
     public partial class MainForm : Form
     {
-        private WorkerService workerService;
-        private HttpProxyService httpProxyService;
-        private SystemProxyService systemProxyService;
-        private RoutingManager routingManager;
-        private TrayIconManager trayIconManager;
+        // 修复 "语法错误，应输入 ','"
+        // 将所有字段初始化为 null，以适应旧版 C# 编译器，同时满足字段初始化要求。
+        // 如果您的 C# 版本支持可空引用类型 (C# 8.0+)，可以改为 private WorkerService? workerService = null;
+        private WorkerService workerService = null!;
+        private HttpProxyService httpProxyService = null!;
+        private SystemProxyService systemProxyService = null!;
+        private RoutingManager routingManager = null!;
+        private TrayIconManager trayIconManager = null!;
         
-        private ProxyConfig config;
-        private string echWorkersPath;
+        private ProxyConfig config = null!;
+        private string echWorkersPath = null!;
+
+        // ====================== TUN 模块新增 START ======================
+        private TunService tunService = null!;
+        private TunRoutingService tunRoutingService = null!;
+        // ====================== TUN 模块新增 END ======================
 
         public MainForm()
         {
@@ -39,6 +47,10 @@ namespace EchWorkersManager.Forms
                 httpProxyService = new HttpProxyService(routingManager);
                 systemProxyService = new SystemProxyService();
                 config = new ProxyConfig();
+
+                // 修复构造函数参数类型不匹配，传入 TunService, WorkerService, RoutingManager
+                tunService = new TunService();
+                tunRoutingService = new TunRoutingService(tunService, workerService, routingManager);
             }
             catch (Exception ex)
             {
@@ -48,6 +60,7 @@ namespace EchWorkersManager.Forms
 
         private void InitializeTrayIcon()
         {
+            // 在 MainForm 构造函数退出前，trayIconManager 必然被初始化
             trayIconManager = new TrayIconManager(
                 this,
                 ShowMainWindow,
@@ -68,13 +81,14 @@ namespace EchWorkersManager.Forms
         {
             config = SettingsHelper.Load();
             
-            ((TextBox)this.Controls["txtDomain"]).Text = config.Domain;
-            ((TextBox)this.Controls["txtIP"]).Text = config.IP;
-            ((TextBox)this.Controls["txtToken"]).Text = config.Token;
-            ((TextBox)this.Controls["txtLocal"]).Text = config.LocalAddress;
-            ((TextBox)this.Controls["txtHttpPort"]).Text = config.HttpProxyPort.ToString();
+            // 使用 '!' 忽略空值警告，因为我们确定这些控件在 CreateControls() 后存在。
+            ((TextBox)this.Controls["txtDomain"]!).Text = config.Domain;
+            ((TextBox)this.Controls["txtIP"]!).Text = config.IP;
+            ((TextBox)this.Controls["txtToken"]!).Text = config.Token;
+            ((TextBox)this.Controls["txtLocal"]!).Text = config.LocalAddress;
+            ((TextBox)this.Controls["txtHttpPort"]!).Text = config.HttpProxyPort.ToString();
             
-            ComboBox cmbRouting = (ComboBox)this.Controls["cmbRouting"];
+            ComboBox cmbRouting = (ComboBox)this.Controls["cmbRouting"]!;
             int index = cmbRouting.Items.IndexOf(config.RoutingMode);
             if (index >= 0)
             {
@@ -82,6 +96,13 @@ namespace EchWorkersManager.Forms
             }
             
             routingManager.SetRoutingMode(config.RoutingMode);
+            
+            // 加载 TUN 模式状态
+            CheckBox chkTun = (CheckBox)this.Controls["chkTun"]!;
+            if (chkTun != null) // 尽管有 '!'，但保留检查以提高健壮性
+            {
+                chkTun.Checked = config.TunEnabled;
+            }
         }
 
         private void InitializeComponent()
@@ -96,6 +117,7 @@ namespace EchWorkersManager.Forms
 
             CreateControls();
 
+            // 修正委托的 sender 参数可空性警告
             this.Resize += Form1_Resize;
             this.FormClosing += Form1_FormClosing;
             this.ResumeLayout(false);
@@ -133,15 +155,29 @@ namespace EchWorkersManager.Forms
             cmbRouting.Items.AddRange(new string[] { "全局模式", "绕过大陆", "直连模式" });
             cmbRouting.SelectedIndex = 1;
             cmbRouting.SelectedIndexChanged += (s, e) => {
-                routingManager.SetRoutingMode(cmbRouting.SelectedItem.ToString());
+                // 忽略 s 参数的空值警告
+                ComboBox? senderComboBox = s as ComboBox;
+                if(senderComboBox != null && senderComboBox.SelectedItem != null)
+                {
+                    routingManager.SetRoutingMode(senderComboBox.SelectedItem.ToString()!);
+                }
             };
             this.Controls.Add(cmbRouting);
 
-            // Buttons
+            // TUN 模式开关
+            CheckBox chkTun = new CheckBox();
+            chkTun.Name = "chkTun";
+            chkTun.Text = "启用 TUN 模式 (全系统流量接管)";
+            chkTun.Location = new Point(20, 230);
+            chkTun.Size = new Size(300, 20);
+            chkTun.Checked = false;
+            this.Controls.Add(chkTun);
+
+            // Buttons (Y 坐标向下调整)
             Button btnStart = new Button();
             btnStart.Name = "btnStart";
             btnStart.Text = "启动服务";
-            btnStart.Location = new Point(130, 250);
+            btnStart.Location = new Point(130, 260); 
             btnStart.Size = new Size(120, 40);
             btnStart.Font = new Font("Microsoft YaHei", 10F, FontStyle.Bold);
             btnStart.BackColor = Color.LightGreen;
@@ -151,7 +187,7 @@ namespace EchWorkersManager.Forms
             Button btnStop = new Button();
             btnStop.Name = "btnStop";
             btnStop.Text = "停止服务";
-            btnStop.Location = new Point(270, 250);
+            btnStop.Location = new Point(270, 260);
             btnStop.Size = new Size(120, 40);
             btnStop.Font = new Font("Microsoft YaHei", 10F, FontStyle.Bold);
             btnStop.BackColor = Color.LightCoral;
@@ -161,25 +197,25 @@ namespace EchWorkersManager.Forms
 
             Button btnSave = new Button();
             btnSave.Text = "保存配置";
-            btnSave.Location = new Point(400, 250);
+            btnSave.Location = new Point(400, 260);
             btnSave.Size = new Size(70, 40);
             btnSave.Click += BtnSave_Click;
             this.Controls.Add(btnSave);
 
-            // Status Label
+            // Status Label (Y 坐标向下调整)
             Label lblStatus = new Label();
             lblStatus.Name = "lblStatus";
             lblStatus.Text = "状态: 未运行\nHTTP代理: 未启动\n系统代理: 未启用\n路由模式: 绕过大陆";
-            lblStatus.Location = new Point(20, 310);
+            lblStatus.Location = new Point(20, 320);
             lblStatus.Size = new Size(450, 100);
             lblStatus.ForeColor = Color.Blue;
             lblStatus.Font = new Font("Microsoft YaHei", 9F);
             this.Controls.Add(lblStatus);
 
-            // Info Label
+            // Info Label (Y 坐标向下调整)
             Label lblInfo = new Label();
             lblInfo.Text = "💡 全局模式：代理所有(除内网)\n💡 绕过大陆：仅代理境外IP(除内网)\n💡 直连模式：不使用代理";
-            lblInfo.Location = new Point(20, 410);
+            lblInfo.Location = new Point(20, 420);
             lblInfo.Size = new Size(450, 60);
             lblInfo.ForeColor = Color.Green;
             lblInfo.Font = new Font("Microsoft YaHei", 8.5F);
@@ -209,24 +245,54 @@ namespace EchWorkersManager.Forms
         {
             try
             {
-                UpdateConfigFromUI();
+                UpdateConfigFromUI(); // 确保 config.TunEnabled 已更新
 
                 workerService.Start(config);
                 Thread.Sleep(1000);
 
                 httpProxyService.Start(config);
                 
-                if (config.RoutingMode != "直连模式")
+                // 只有在非直连模式下且 TUN 未启用时，才设置系统代理
+                if (config.RoutingMode != "直连模式" && !config.TunEnabled)
                 {
                     systemProxyService.Enable(config.HttpProxyPort);
                 }
+                else if (config.TunEnabled)
+                {
+                    // 确保如果 TUN 启用，系统代理是关闭的，避免冲突
+                    systemProxyService.Disable(); 
+                }
 
-                ((Button)this.Controls["btnStart"]).Enabled = false;
-                ((Button)this.Controls["btnStop"]).Enabled = true;
+                // ====================== TUN 模块启动逻辑 START ======================
+                string tunStatus = "未启用";
+                if (config.TunEnabled) // 只有当用户启用 TUN 时才启动服务和路由
+                {
+                    tunService.Start();
+                    tunRoutingService.StartRouting(config); 
+                    tunStatus = "已启动";
+                }
+                // ====================== TUN 模块启动逻辑 END ======================
+
+                ((Button)this.Controls["btnStart"]!).Enabled = false;
+                ((Button)this.Controls["btnStop"]!).Enabled = true;
                 trayIconManager.UpdateMenuState(true);
                 
-                string proxyStatus = config.RoutingMode == "直连模式" ? "未启用(直连)" : "已启用";
-                UpdateStatusLabel($"✅ 状态: 运行中\n✅ HTTP代理: 127.0.0.1:{config.HttpProxyPort}\n✅ 系统代理: {proxyStatus}\n✅ 路由模式: {config.RoutingMode}");
+                string proxyStatus;
+                if (config.TunEnabled)
+                {
+                    proxyStatus = "已接管 (TUN)";
+                }
+                else if (config.RoutingMode != "直连模式")
+                {
+                    proxyStatus = $"已启用 (HTTP:{config.HttpProxyPort})";
+                }
+                else
+                {
+                    proxyStatus = "未启用 (直连)";
+                }
+                
+                // 更新状态标签
+                UpdateStatusLabel($"✅ 状态: 运行中\n✅ HTTP代理: 127.0.0.1:{config.HttpProxyPort}\n✅ 系统代理: {proxyStatus}\n🌐 TUN: {tunStatus}\n✅ 路由模式: {config.RoutingMode}");
                 trayIconManager.UpdateText($"ECH Workers Manager - 运行中 ({config.RoutingMode})");
             }
             catch (Exception ex)
@@ -243,11 +309,20 @@ namespace EchWorkersManager.Forms
                 httpProxyService.Stop();
                 workerService.Stop();
 
-                ((Button)this.Controls["btnStart"]).Enabled = true;
-                ((Button)this.Controls["btnStop"]).Enabled = false;
+                // ====================== TUN 模块停止逻辑 START ======================
+                // 只有在运行时启用了 TUN 才需要停止
+                if (config.TunEnabled) 
+                {
+                    tunRoutingService.StopRouting();
+                    tunService.Stop();
+                }
+                // ====================== TUN 模块停止逻辑 END ======================
+
+                ((Button)this.Controls["btnStart"]!).Enabled = true;
+                ((Button)this.Controls["btnStop"]!).Enabled = false;
                 trayIconManager.UpdateMenuState(false);
                 
-                UpdateStatusLabel("❌ 状态: 已停止\n❌ HTTP代理: 已停止\n❌ 系统代理: 已禁用");
+                UpdateStatusLabel("❌ 状态: 已停止\n❌ HTTP代理: 已停止\n❌ 系统代理: 已禁用\n❌ TUN: 已停止");
                 trayIconManager.UpdateText("ECH Workers Manager - 已停止");
             }
             catch (Exception ex)
@@ -256,7 +331,8 @@ namespace EchWorkersManager.Forms
             }
         }
 
-        private void BtnSave_Click(object sender, EventArgs e)
+        // 修正 sender 参数可空性警告
+        private void BtnSave_Click(object? sender, EventArgs e)
         {
             UpdateConfigFromUI();
             SettingsHelper.Save(config);
@@ -265,19 +341,27 @@ namespace EchWorkersManager.Forms
 
         private void UpdateConfigFromUI()
         {
-            config.Domain = ((TextBox)this.Controls["txtDomain"]).Text;
-            config.IP = ((TextBox)this.Controls["txtIP"]).Text;
-            config.Token = ((TextBox)this.Controls["txtToken"]).Text;
-            config.LocalAddress = ((TextBox)this.Controls["txtLocal"]).Text;
-            config.HttpProxyPort = int.Parse(((TextBox)this.Controls["txtHttpPort"]).Text);
-            config.RoutingMode = ((ComboBox)this.Controls["cmbRouting"]).SelectedItem.ToString();
+            // 使用 '!' 忽略空值警告
+            config.Domain = ((TextBox)this.Controls["txtDomain"]!).Text;
+            config.IP = ((TextBox)this.Controls["txtIP"]!).Text;
+            config.Token = ((TextBox)this.Controls["txtToken"]!).Text;
+            config.LocalAddress = ((TextBox)this.Controls["txtLocal"]!).Text;
+            config.HttpProxyPort = int.Parse(((TextBox)this.Controls["txtHttpPort"]!).Text);
             
+            ComboBox cmbRouting = (ComboBox)this.Controls["cmbRouting"]!;
+            config.RoutingMode = cmbRouting.SelectedItem!.ToString();
+            
+            // 保存 TUN 模式状态
+            CheckBox chkTun = (CheckBox)this.Controls["chkTun"]!;
+            config.TunEnabled = chkTun.Checked;
+
             routingManager.SetRoutingMode(config.RoutingMode);
         }
 
         private void UpdateStatusLabel(string text)
         {
-            Label lblStatus = (Label)this.Controls["lblStatus"];
+            // 使用 '!' 忽略空值警告
+            Label lblStatus = (Label)this.Controls["lblStatus"]!;
             if (lblStatus.InvokeRequired)
             {
                 lblStatus.Invoke(new Action(() => lblStatus.Text = text));
@@ -288,7 +372,8 @@ namespace EchWorkersManager.Forms
             }
         }
 
-        private void Form1_Resize(object sender, EventArgs e)
+        // 修正 sender 参数可空性警告
+        private void Form1_Resize(object? sender, EventArgs e)
         {
             if (this.WindowState == FormWindowState.Minimized)
             {
@@ -299,7 +384,8 @@ namespace EchWorkersManager.Forms
             }
         }
 
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        // 修正 sender 参数可空性警告
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
         {
             if (workerService.IsRunning)
             {
